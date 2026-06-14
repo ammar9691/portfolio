@@ -1,0 +1,20 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Ansible (real inventories/vars hold host info)
+ansible/inventory.ini
+ansible/group_vars/all.yml
+*.retry
+
+# Landing page is hosted separately, not in this repo
+index.html
+assets/
+
+# Local / editor
+.DS_Store
+*.swp

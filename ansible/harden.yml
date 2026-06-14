@@ -1,0 +1,99 @@
+---
+# baseline hardening for a fresh ubuntu/debian or almalinux/rhel server.
+# creates a non-root sudo admin with an ssh key, locks down ssh, brings up a
+# firewall, installs fail2ban, and turns on automatic security updates.
+# run: ansible-playbook -i inventory.ini harden.yml
+# idempotent, so it is safe to re-run across the fleet whenever a host drifts.
+- name: Baseline server hardening
+  hosts: all
+  become: true
+  vars:
+    admin_user: deploy
+    admin_pubkey: "{{ lookup('file', admin_pubkey_path) }}"
+    admin_pubkey_path: ~/.ssh/id_ed25519.pub
+    ssh_port: 22
+    allow_tcp_ports: [22, 80, 443]
+    timezone: UTC
+
+  tasks:
+    - name: Detect package family
+      set_fact:
+        is_apt: "{{ ansible_pkg_mgr in ['apt'] }}"
+
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Create admin user
+      user:
+        name: "{{ admin_user }}"
+        groups: "{{ 'sudo' if is_apt else 'wheel' }}"
+        append: true
+        shell: /bin/bash
+        create_home: true
+
+    - name: Install admin SSH key
+      authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ admin_pubkey }}"
+        state: present
+
+    - name: Passwordless sudo for admin
+      copy:
+        dest: "/etc/sudoers.d/90-{{ admin_user }}"
+        content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Harden sshd
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.re }}"
+        line: "{{ item.line }}"
+        validate: "sshd -t -f %s"
+      loop:
+        - { re: '^#?PermitRootLogin',        line: 'PermitRootLogin no' }
+        - { re: '^#?PasswordAuthentication',  line: 'PasswordAuthentication no' }
+        - { re: '^#?ChallengeResponseAuthentication', line: 'ChallengeResponseAuthentication no' }
+        - { re: '^#?Port',                    line: 'Port {{ ssh_port }}' }
+      notify: restart ssh
+
+    - name: Install base and security packages
+      package:
+        name:
+          - fail2ban
+          - "{{ 'unattended-upgrades' if is_apt else 'dnf-automatic' }}"
+          - "{{ 'ufw' if is_apt else 'firewalld' }}"
+          - curl
+          - vim
+        state: present
+
+    - name: UFW default deny and allow ports (debian/ubuntu)
+      when: is_apt
+      block:
+        - community.general.ufw: { direction: incoming, policy: deny }
+        - community.general.ufw: { rule: allow, port: "{{ item }}", proto: tcp }
+          loop: "{{ allow_tcp_ports }}"
+        - community.general.ufw: { state: enabled }
+
+    - name: firewalld allow ports (rhel/almalinux)
+      when: not is_apt
+      block:
+        - service: { name: firewalld, state: started, enabled: true }
+        - ansible.posix.firewalld: { port: "{{ item }}/tcp", permanent: true, immediate: true, state: enabled }
+          loop: "{{ allow_tcp_ports }}"
+
+    - name: Enable fail2ban
+      service: { name: fail2ban, state: started, enabled: true }
+
+    - name: Enable automatic security updates
+      service:
+        name: "{{ 'unattended-upgrades' if is_apt else 'dnf-automatic.timer' }}"
+        state: started
+        enabled: true
+
+  handlers:
+    - name: restart ssh
+      service:
+        name: "{{ 'ssh' if is_apt else 'sshd' }}"
+        state: restarted

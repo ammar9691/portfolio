@@ -1,0 +1,6 @@
+# Copy to all.yml and edit. Override any default from harden.yml here.
+admin_user: deploy
+admin_pubkey_path: ~/.ssh/id_ed25519.pub
+ssh_port: 22
+allow_tcp_ports: [22, 80, 443]
+timezone: Asia/Karachi
