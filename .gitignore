@@ -11,9 +11,8 @@ ansible/inventory.ini
 ansible/group_vars/all.yml
 *.retry
 
-# Landing page is hosted separately, not in this repo
-index.html
-assets/
+# Website is hosted separately (Netlify), not in this repo
+site/
 
 # Local / editor
 .DS_Store
