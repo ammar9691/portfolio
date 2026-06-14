@@ -30,11 +30,12 @@ if [[ "$JSON" == "1" ]]; then
   exit "$breach"
 fi
 
-bar(){ local p=$1 w=$2; [[ "$p" -ge "$w" ]] && echo "  [!]" || echo "  [ok]"; }
+bar(){ if [[ "$1" -ge "$2" ]]; then echo "  [!]"; else echo "  [ok]"; fi; }
+load_mark(){ if [[ "$load_alarm" == "1" ]]; then echo "  [!]"; fi; }
 
 echo "== health: $(hostname) =="
 echo "uptime        : $uptime_str"
-echo "load (1m)     : $load1 / ${cores} cores$([[ "$load_alarm" == 1 ]] && echo '  [!]')"
+echo "load (1m)     : $load1 / ${cores} cores$(load_mark)"
 echo "memory used   : ${mem_used_pct}%$(bar "$mem_used_pct" "$MEM_WARN")"
 echo "disk / used   : ${disk_pct}%$(bar "$disk_pct" "$DISK_WARN")"
 echo "failed ssh/24h: $failed_ssh"
@@ -42,5 +43,6 @@ echo
 echo "top memory consumers:"
 ps -eo pmem,pid,comm --sort=-pmem 2>/dev/null | head -6 | sed 's/^/  /' || true
 
-[[ "$breach" == "1" ]] && echo && echo "STATUS: ATTENTION NEEDED" || echo && echo "STATUS: healthy"
+echo
+if [[ "$breach" == "1" ]]; then echo "STATUS: ATTENTION NEEDED"; else echo "STATUS: healthy"; fi
 exit "$breach"

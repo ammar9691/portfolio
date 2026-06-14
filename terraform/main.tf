@@ -20,9 +20,17 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+# http and https are intentionally public, this is a web server. ssh is locked to
+# a single admin cidr. outbound is open so the host can pull os and security
+# updates. these are documented, accepted exceptions, not oversights.
+#tfsec:ignore:aws-ec2-no-public-ingress-sgr
+#tfsec:ignore:aws-ec2-no-public-egress-sgr
 resource "aws_security_group" "web" {
+  #checkov:skip=CKV_AWS_260:http/80 is public by design on a web server
+  #checkov:skip=CKV_AWS_277:https/443 is public by design on a web server
+  #checkov:skip=CKV_AWS_382:outbound is required for os and security updates
   name        = "${var.name}-sg"
-  description = "Web server: SSH from admin CIDR, HTTP/HTTPS from anywhere"
+  description = "web server: ssh from admin cidr, http/https from anywhere"
   vpc_id      = data.aws_vpc.default.id
   tags        = local.common_tags
 
@@ -48,11 +56,40 @@ resource "aws_security_group" "web" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   egress {
+    description = "allow all outbound for os and security updates"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+
+# least-privilege instance role. enables SSM session manager for management,
+# so the box is reachable without opening or relying on SSH.
+data "aws_iam_policy_document" "assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "web" {
+  name               = "${var.name}-role"
+  assume_role_policy = data.aws_iam_policy_document.assume.json
+  tags               = local.common_tags
+}
+
+resource "aws_iam_role_policy_attachment" "ssm" {
+  role       = aws_iam_role.web.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "web" {
+  name = "${var.name}-profile"
+  role = aws_iam_role.web.name
 }
 
 resource "aws_instance" "web" {
@@ -61,6 +98,9 @@ resource "aws_instance" "web" {
   instance_type          = var.instance_type
   key_name               = var.key_name
   vpc_security_group_ids = [aws_security_group.web.id]
+  iam_instance_profile   = aws_iam_instance_profile.web.name
+  monitoring             = true
+  ebs_optimized          = true
   tags                   = merge(local.common_tags, { Name = "${var.name}-${count.index + 1}" })
 
   user_data = <<-EOF

@@ -25,15 +25,23 @@ else
   wp db export "$backup_dir/db-$ts.sql" --quiet
   gzip -f "$backup_dir/db-$ts.sql"
   echo "  saved $backup_dir/db-$ts.sql.gz"
-  ls -1t "$backup_dir"/db-*.sql.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+  # keep the 7 newest backups, prune the rest (mtime sorted, handles odd names)
+  find "$backup_dir" -maxdepth 1 -name 'db-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null \
+    | sort -rn | tail -n +8 | cut -d' ' -f2- | xargs -r rm -f
 fi
 
 update(){
   echo "[$2] $1 updates"
   if [[ "$DRY" == "1" ]]; then
-    [[ "$1" == "core" ]] && wp core check-update || wp "$1" list --update=available --fields=name,version,update_version 2>/dev/null || true
+    if [[ "$1" == "core" ]]; then
+      wp core check-update || true
+    else
+      wp "$1" list --update=available --fields=name,version,update_version 2>/dev/null || true
+    fi
+  elif [[ "$1" == "core" ]]; then
+    wp core update
   else
-    [[ "$1" == "core" ]] && wp core update || wp "$1" update --all
+    wp "$1" update --all
   fi
 }
 update core   "2/4"
