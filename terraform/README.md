@@ -35,9 +35,5 @@ was destroyed so nothing lingers. SSH was scoped to a single `/32`, not the worl
   or IP detail leaks.
 - `ssh_ingress_cidr` is required with no default on purpose, so SSH is never
   accidentally opened to everyone.
-
-## Roadmap
-
-- remote S3 backend with state locking
-- `tfsec` and `checkov` policy scanning in CI (see `.github/workflows`)
-- S3 with CloudFront static-site variant using origin access control
+- `tfsec` and `checkov` scan this module on every push (see `.github/workflows`).
+  The intentional public web access is allowed via documented exceptions.

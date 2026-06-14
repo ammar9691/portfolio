@@ -33,8 +33,3 @@ ansible-playbook -i inventory.ini harden.yml --check --diff  # dry run
 
 The first run connects as `root`. After it completes, root SSH is closed and you
 log in as the admin user on the configured port. Re-run it any time a host drifts.
-
-## Roadmap
-
-- `lemp.yml`, Nginx with PHP-FPM, MariaDB and WordPress
-- turn the hardening into a reusable role with molecule tests
